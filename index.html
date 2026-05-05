@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Binaural Loom — Ontos Labs</title>
+<style>
+  :root {
+    --bg: #0d0d1a;
+    --panel: #161624;
+    --panel-edge: #2a2540;
+    --orange: #ff8800;
+    --orange-glow: #ffaa44;
+    --purple: #b266ff;
+    --green: #66dd88;
+    --cream: #f0e8d8;
+    --dim: #8a8298;
+    --schumann: #ffcc44;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--cream);
+    font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+  .app { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  header { text-align: center; margin-bottom: 20px; }
+  header h1 { font-size: 2.4em; margin: 0; letter-spacing: 0.08em;
+    background: linear-gradient(90deg, var(--orange), var(--schumann), var(--purple));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text; font-weight: 300; }
+  header .subtitle { color: var(--dim); font-size: 0.95em; margin-top: 4px;
+    letter-spacing: 0.05em; }
+  .visualizer { background: #06060c; border: 1px solid var(--panel-edge);
+    border-radius: 6px; height: 280px; margin-bottom: 20px; position: relative;
+    overflow: hidden; box-shadow: inset 0 0 60px rgba(255,136,0,0.08); }
+  #viz { width: 100%; height: 100%; display: block; }
+  .panel { background: var(--panel); border: 1px solid var(--panel-edge);
+    border-radius: 6px; padding: 18px; margin-bottom: 16px; }
+  .panel-title { color: var(--orange); font-size: 0.78em; letter-spacing: 0.18em;
+    text-transform: uppercase; margin-bottom: 14px; font-weight: 600; }
+  .controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; }
+  .ctrl { display: flex; flex-direction: column; gap: 6px; }
+  .ctrl label { font-size: 0.75em; letter-spacing: 0.1em; color: var(--dim);
+    text-transform: uppercase; }
+  .ctrl input[type="range"] { -webkit-appearance: none; appearance: none;
+    width: 100%; height: 4px; background: #2a2540; border-radius: 2px; outline: none; }
+  .ctrl input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none;
+    appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--orange); cursor: pointer; box-shadow: 0 0 8px var(--orange); }
+  .ctrl .val { font-family: 'Consolas', monospace; color: var(--orange-glow);
+    font-size: 1.1em; text-align: center; margin-top: 2px; }  .presets { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+  .preset { background: #1a1a2c; border: 1px solid var(--panel-edge); color: var(--cream);
+    padding: 12px 8px; border-radius: 4px; cursor: pointer; font-size: 0.82em;
+    text-align: center; transition: all 0.15s; font-family: inherit;
+    line-height: 1.3; }
+  .preset:hover { border-color: var(--orange); background: #20203a;
+    box-shadow: 0 0 10px rgba(255,136,0,0.2); }
+  .preset.schumann { border-color: var(--schumann); color: var(--schumann);
+    box-shadow: 0 0 14px rgba(255,204,68,0.25);
+    background: linear-gradient(180deg, #2a2410, #1a1a2c); }
+  .preset.schumann:hover { box-shadow: 0 0 22px rgba(255,204,68,0.5); }
+  .preset .freq { display: block; font-family: 'Consolas', monospace;
+    font-size: 1.1em; margin-bottom: 2px; }
+  .preset .lbl { display: block; color: var(--dim); font-size: 0.85em; }
+  .preset.schumann .lbl { color: var(--schumann); opacity: 0.85; }
+  .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .btn { background: var(--panel); border: 1px solid var(--panel-edge);
+    color: var(--cream); padding: 10px 18px; border-radius: 4px; cursor: pointer;
+    font-family: inherit; font-size: 0.95em; transition: all 0.15s; }
+  .btn:hover { border-color: var(--orange); }
+  .btn.primary { background: linear-gradient(180deg, #cc6600, #883300);
+    border-color: var(--orange); color: white; }
+  .btn.primary:hover { box-shadow: 0 0 14px rgba(255,136,0,0.5); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .export-row { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .export-row label { font-size: 0.78em; color: var(--dim);
+    letter-spacing: 0.08em; text-transform: uppercase; }
+  .export-row input { background: #06060c; border: 1px solid var(--panel-edge);
+    color: var(--orange-glow); padding: 8px; border-radius: 3px; width: 80px;
+    font-family: 'Consolas', monospace; }  .status { margin-top: 14px; padding: 10px 14px; background: #06060c;
+    border-left: 3px solid var(--orange); border-radius: 2px; font-size: 0.88em;
+    color: var(--dim); font-family: 'Consolas', monospace; min-height: 1.2em; }
+  .status.active { color: var(--orange-glow); border-left-color: var(--schumann); }
+  .footer { text-align: center; color: var(--dim); font-size: 0.75em;
+    margin-top: 24px; letter-spacing: 0.1em; }
+  .footer .glyph { color: var(--purple); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>BINAURAL LOOM</h1>
+    <p class="subtitle">Schumann-tuned binaural beat generator &middot; Ontos Labs</p>
+  </header>
+
+  <div class="visualizer">
+    <canvas id="viz"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Modulators</div>
+    <div class="controls">
+      <div class="ctrl">
+        <label>Carrier (Hz)</label>
+        <input type="range" id="carrier" min="40" max="500" value="200" step="0.5">
+        <div class="val" id="carrier-val">200.0</div>
+      </div>
+      <div class="ctrl">
+        <label>Beat &Delta; (Hz)</label>
+        <input type="range" id="beat" min="0.1" max="40" value="7.83" step="0.01">
+        <div class="val" id="beat-val">7.83</div>
+      </div>      <div class="ctrl">
+        <label>Drone (5th)</label>
+        <input type="range" id="drone" min="0" max="1" value="0" step="0.01">
+        <div class="val" id="drone-val">off</div>
+      </div>
+      <div class="ctrl">
+        <label>Pink Noise</label>
+        <input type="range" id="noise" min="0" max="1" value="0" step="0.01">
+        <div class="val" id="noise-val">off</div>
+      </div>
+      <div class="ctrl">
+        <label>Master</label>
+        <input type="range" id="master" min="0" max="1" value="0.4" step="0.01">
+        <div class="val" id="master-val">0.40</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Presets</div>
+    <div class="presets">
+      <button class="preset schumann" data-c="200" data-b="7.83">
+        <span class="freq">7.83 Hz</span><span class="lbl">Schumann</span>
+      </button>
+      <button class="preset" data-c="100" data-b="2.0">
+        <span class="freq">2.0 Hz</span><span class="lbl">Delta &mdash; Sleep</span>
+      </button>
+      <button class="preset" data-c="150" data-b="6.0">
+        <span class="freq">6.0 Hz</span><span class="lbl">Theta &mdash; Trance</span>
+      </button>      <button class="preset" data-c="200" data-b="10.0">
+        <span class="freq">10.0 Hz</span><span class="lbl">Alpha &mdash; Calm</span>
+      </button>
+      <button class="preset" data-c="250" data-b="20.0">
+        <span class="freq">20.0 Hz</span><span class="lbl">Beta &mdash; Focus</span>
+      </button>
+      <button class="preset" data-c="300" data-b="40.0">
+        <span class="freq">40.0 Hz</span><span class="lbl">Gamma &mdash; Insight</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Transport &amp; Export</div>
+    <div class="actions">
+      <button class="btn primary" id="play">&#9658; Play</button>
+      <button class="btn" id="stop">&#9632; Stop</button>
+      <div class="export-row">
+        <label>Length (s)</label>
+        <input type="number" id="duration" value="60" min="1" max="3600">
+        <button class="btn" id="export-wav">&darr; Export WAV</button>
+      </div>
+    </div>
+    <div class="status" id="status">Ready. Headphones recommended &mdash; binaural beats need stereo separation.</div>
+  </div>
+
+  <div class="footer">
+    Ontos Labs <span class="glyph">&#9670;</span> Phase coherence as music <span class="glyph">&#9670;</span> v0.1
+  </div>
+</div><script>
+'use strict';
+
+// === STATE ===
+let ctx = null;
+let nodes = null;
+let isPlaying = false;
+const $ = id => document.getElementById(id);
+const params = ['carrier','beat','drone','noise','master'];
+
+// === UI WIRING ===
+function fmt(id, v) {
+  if (id === 'drone' || id === 'noise') return v > 0 ? v.toFixed(2) : 'off';
+  if (id === 'master') return v.toFixed(2);
+  return v.toFixed(id === 'beat' ? 2 : 1);
+}
+params.forEach(id => {
+  const el = $(id);
+  const lbl = $(id + '-val');
+  const update = () => {
+    lbl.textContent = fmt(id, +el.value);
+    if (isPlaying) updateLive();
+  };
+  el.addEventListener('input', update);
+  update();
+});
+
+document.querySelectorAll('.preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $('carrier').value = btn.dataset.c;
+    $('beat').value = btn.dataset.b;
+    $('carrier').dispatchEvent(new Event('input'));
+    $('beat').dispatchEvent(new Event('input'));
+    setStatus(`Preset loaded: ${btn.dataset.b} Hz over ${btn.dataset.c} Hz carrier.`);
+  });
+});function setStatus(msg, active = false) {
+  const s = $('status');
+  s.innerHTML = msg;
+  s.classList.toggle('active', active);
+}
+
+// === PINK NOISE GENERATOR (Voss-McCartney) ===
+function makePinkNoiseBuffer(audioCtx, durationSec) {
+  const sr = audioCtx.sampleRate;
+  const len = Math.floor(sr * durationSec);
+  const buf = audioCtx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch);
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886*b0 + w*0.0555179;
+      b1 = 0.99332*b1 + w*0.0750759;
+      b2 = 0.96900*b2 + w*0.1538520;
+      b3 = 0.86650*b3 + w*0.3104856;
+      b4 = 0.55000*b4 + w*0.5329522;
+      b5 = -0.7616*b5 - w*0.0168980;
+      data[i] = (b0+b1+b2+b3+b4+b5+b6 + w*0.5362) * 0.11;
+      b6 = w * 0.115926;
+    }
+  }
+  return buf;
+}// === LIVE AUDIO ENGINE ===
+function buildGraph(audioCtx, opts) {
+  const { carrier, beat, drone, noise, master } = opts;
+  const masterGain = audioCtx.createGain();
+  masterGain.gain.value = master;
+  masterGain.connect(audioCtx.destination);
+
+  // Left ear: carrier - beat/2
+  const lOsc = audioCtx.createOscillator();
+  lOsc.type = 'sine';
+  lOsc.frequency.value = carrier - beat / 2;
+  const lGain = audioCtx.createGain(); lGain.gain.value = 0.5;
+  const lPan = audioCtx.createStereoPanner(); lPan.pan.value = -1;
+  lOsc.connect(lGain).connect(lPan).connect(masterGain);
+
+  // Right ear: carrier + beat/2
+  const rOsc = audioCtx.createOscillator();
+  rOsc.type = 'sine';
+  rOsc.frequency.value = carrier + beat / 2;
+  const rGain = audioCtx.createGain(); rGain.gain.value = 0.5;
+  const rPan = audioCtx.createStereoPanner(); rPan.pan.value = 1;
+  rOsc.connect(rGain).connect(rPan).connect(masterGain);
+
+  const out = { masterGain, lOsc, rOsc, lGain, rGain };
+
+  // Optional drone (perfect fifth above carrier, triangle)
+  if (drone > 0) {
+    const dOsc = audioCtx.createOscillator();
+    dOsc.type = 'triangle';
+    dOsc.frequency.value = carrier * 1.5;
+    const dGain = audioCtx.createGain(); dGain.gain.value = drone * 0.18;
+    dOsc.connect(dGain).connect(masterGain);
+    out.dOsc = dOsc; out.dGain = dGain;
+  }  // Optional pink noise bed
+  if (noise > 0) {
+    const nBuf = makePinkNoiseBuffer(audioCtx, 4);
+    const nSrc = audioCtx.createBufferSource();
+    nSrc.buffer = nBuf; nSrc.loop = true;
+    const nGain = audioCtx.createGain(); nGain.gain.value = noise * 0.12;
+    nSrc.connect(nGain).connect(masterGain);
+    out.nSrc = nSrc; out.nGain = nGain;
+  }
+  return out;
+}
+
+function getOpts() {
+  return {
+    carrier: +$('carrier').value,
+    beat: +$('beat').value,
+    drone: +$('drone').value,
+    noise: +$('noise').value,
+    master: +$('master').value,
+  };
+}
+
+function updateLive() {
+  if (!nodes || !ctx) return;
+  const o = getOpts();
+  const t = ctx.currentTime;
+  nodes.lOsc.frequency.setTargetAtTime(o.carrier - o.beat/2, t, 0.05);
+  nodes.rOsc.frequency.setTargetAtTime(o.carrier + o.beat/2, t, 0.05);
+  nodes.masterGain.gain.setTargetAtTime(o.master, t, 0.05);
+  if (nodes.dGain) nodes.dGain.gain.setTargetAtTime(o.drone * 0.18, t, 0.05);
+  if (nodes.nGain) nodes.nGain.gain.setTargetAtTime(o.noise * 0.12, t, 0.05);
+  if (nodes.dOsc) nodes.dOsc.frequency.setTargetAtTime(o.carrier * 1.5, t, 0.05);
+}function play() {
+  if (isPlaying) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const o = getOpts();
+  nodes = buildGraph(ctx, o);
+  // Soft fade-in
+  nodes.masterGain.gain.setValueAtTime(0, ctx.currentTime);
+  nodes.masterGain.gain.linearRampToValueAtTime(o.master, ctx.currentTime + 0.6);
+  nodes.lOsc.start();
+  nodes.rOsc.start();
+  if (nodes.dOsc) nodes.dOsc.start();
+  if (nodes.nSrc) nodes.nSrc.start();
+  isPlaying = true;
+  setStatus(`Playing &mdash; ${o.beat.toFixed(2)} Hz beat over ${o.carrier.toFixed(1)} Hz carrier`, true);
+}
+
+function stop() {
+  if (!isPlaying || !ctx) return;
+  const t = ctx.currentTime;
+  nodes.masterGain.gain.cancelScheduledValues(t);
+  nodes.masterGain.gain.setValueAtTime(nodes.masterGain.gain.value, t);
+  nodes.masterGain.gain.linearRampToValueAtTime(0, t + 0.4);
+  setTimeout(() => {
+    try { nodes.lOsc.stop(); nodes.rOsc.stop(); } catch(e) {}
+    if (nodes.dOsc) try { nodes.dOsc.stop(); } catch(e) {}
+    if (nodes.nSrc) try { nodes.nSrc.stop(); } catch(e) {}
+    ctx.close();
+    ctx = null; nodes = null;
+  }, 500);
+  isPlaying = false;
+  setStatus('Stopped.');
+}
+
+$('play').addEventListener('click', play);
+$('stop').addEventListener('click', stop);// === WAV EXPORT (offline render) ===
+async function exportWav() {
+  const o = getOpts();
+  const seconds = Math.max(1, Math.min(3600, +$('duration').value || 60));
+  const sr = 44100;
+  setStatus(`Rendering ${seconds}s offline at 44.1 kHz...`, true);
+  $('export-wav').disabled = true;
+
+  try {
+    const offline = new OfflineAudioContext(2, sr * seconds, sr);
+    const g = buildGraph(offline, o);
+
+    // Click-free fades
+    const fade = Math.min(1.0, seconds * 0.05);
+    g.masterGain.gain.setValueAtTime(0, 0);
+    g.masterGain.gain.linearRampToValueAtTime(o.master, fade);
+    g.masterGain.gain.setValueAtTime(o.master, seconds - fade);
+    g.masterGain.gain.linearRampToValueAtTime(0, seconds);
+
+    g.lOsc.start(0); g.rOsc.start(0);
+    if (g.dOsc) g.dOsc.start(0);
+    if (g.nSrc) g.nSrc.start(0);
+
+    const buf = await offline.startRendering();
+    const blob = bufferToWav(buf);
+    const beatStr = o.beat.toFixed(2).replace('.','p');
+    const fname = `binaural_${o.carrier.toFixed(0)}Hz_${beatStr}Hz_${seconds}s.wav`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    setStatus(`Exported: ${fname} &mdash; drag into FL Studio playlist or Edison.`, true);
+  } catch (e) {
+    setStatus('Export failed: ' + e.message);
+  } finally {
+    $('export-wav').disabled = false;
+  }
+}
+$('export-wav').addEventListener('click', exportWav);function bufferToWav(buffer) {
+  const numCh = buffer.numberOfChannels;
+  const sr = buffer.sampleRate;
+  const bits = 16;
+  const bytesPerSample = bits / 8;
+  const dataLen = buffer.length * numCh * bytesPerSample;
+  const ab = new ArrayBuffer(44 + dataLen);
+  const v = new DataView(ab);
+
+  const writeStr = (off, s) => { for (let i=0;i<s.length;i++) v.setUint8(off+i, s.charCodeAt(i)); };
+
+  writeStr(0, 'RIFF');
+  v.setUint32(4, 36 + dataLen, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  v.setUint32(16, 16, true);     // PCM chunk size
+  v.setUint16(20, 1, true);      // PCM format
+  v.setUint16(22, numCh, true);
+  v.setUint32(24, sr, true);
+  v.setUint32(28, sr * numCh * bytesPerSample, true);
+  v.setUint16(32, numCh * bytesPerSample, true);
+  v.setUint16(34, bits, true);
+  writeStr(36, 'data');
+  v.setUint32(40, dataLen, true);
+
+  const channels = [];
+  for (let c = 0; c < numCh; c++) channels.push(buffer.getChannelData(c));
+  let off = 44;
+  for (let i = 0; i < buffer.length; i++) {
+    for (let c = 0; c < numCh; c++) {
+      let s = Math.max(-1, Math.min(1, channels[c][i]));
+      v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      off += 2;
+    }
+  }
+  return new Blob([ab], { type: 'audio/wav' });
+}// === VISUALIZER (Lissajous + mandala + central pulse) ===
+const canvas = $('viz');
+const vctx = canvas.getContext('2d');
+let phase = 0;
+let lastT = performance.now();
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * dpr;
+  canvas.height = canvas.clientHeight * dpr;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  const beat = +$('beat').value;
+  const carrier = +$('carrier').value;
+  phase += dt * beat * Math.PI * 2;
+
+  // Trail effect
+  vctx.fillStyle = 'rgba(6, 6, 12, 0.18)';
+  vctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  const R = Math.min(cx, cy) * 0.78;
+
+  // Outer ring
+  vctx.strokeStyle = 'rgba(178, 102, 255, 0.15)';
+  vctx.lineWidth = 1;
+  vctx.beginPath();
+  vctx.arc(cx, cy, R, 0, Math.PI * 2);
+  vctx.stroke();  // Lissajous: actual L vs R waveform locus, slowly evolving with beat
+  const ratio = (carrier + beat/2) / (carrier - beat/2);
+  vctx.strokeStyle = 'rgba(255, 136, 0, 0.55)';
+  vctx.lineWidth = 1.5;
+  vctx.beginPath();
+  const N = 360;
+  for (let i = 0; i <= N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    const x = cx + R * 0.6 * Math.sin(t);
+    const y = cy + R * 0.6 * Math.sin(t * ratio + phase * 0.3);
+    if (i === 0) vctx.moveTo(x, y); else vctx.lineTo(x, y);
+  }
+  vctx.stroke();
+
+  // 12-petal rotating mandala
+  const petals = 12;
+  for (let i = 0; i < petals; i++) {
+    const a = (i / petals) * Math.PI * 2 + phase * 0.08;
+    const px = cx + Math.cos(a) * R * 0.85;
+    const py = cy + Math.sin(a) * R * 0.85;
+    const pulse = 0.5 + 0.5 * Math.sin(phase + i * 0.3);
+    vctx.strokeStyle = `rgba(178, 102, 255, ${0.15 + pulse * 0.25})`;
+    vctx.lineWidth = 1;
+    vctx.beginPath();
+    vctx.arc(px, py, R * 0.18, 0, Math.PI * 2);
+    vctx.stroke();
+  }
+
+  // Central pulsing core
+  const core = (Math.sin(phase) + 1) / 2;
+  const grad = vctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.4);
+  grad.addColorStop(0, `rgba(255, 204, 68, ${0.25 + core * 0.45})`);
+  grad.addColorStop(0.5, `rgba(255, 136, 0, ${0.1 + core * 0.2})`);
+  grad.addColorStop(1, 'rgba(255, 100, 0, 0)');
+  vctx.fillStyle = grad;
+  vctx.beginPath();
+  vctx.arc(cx, cy, R * 0.4, 0, Math.PI * 2);
+  vctx.fill();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
