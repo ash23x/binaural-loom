@@ -50,7 +50,16 @@
     appearance: none; width: 16px; height: 16px; border-radius: 50%;
     background: var(--orange); cursor: pointer; box-shadow: 0 0 8px var(--orange); }
   .ctrl .val { font-family: 'Consolas', monospace; color: var(--orange-glow);
-    font-size: 1.1em; text-align: center; margin-top: 2px; }  .presets { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+    font-size: 1.1em; text-align: center; margin-top: 2px; }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .mode { background: #1a1a2c; border: 1px solid var(--panel-edge); color: var(--cream);
+    padding: 10px 8px; border-radius: 4px; cursor: pointer; font-family: inherit;
+    font-size: 0.9em; text-align: center; transition: all 0.15s; line-height: 1.3; }
+  .mode .sub { display: block; color: var(--dim); font-size: 0.78em; margin-top: 2px; }
+  .mode:hover { border-color: var(--orange); }
+  .mode.active { border-color: var(--orange); color: var(--orange-glow);
+    box-shadow: 0 0 10px rgba(255,136,0,0.25); background: #20203a; }
+  .presets { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
   .preset { background: #1a1a2c; border: 1px solid var(--panel-edge); color: var(--cream);
     padding: 12px 8px; border-radius: 4px; cursor: pointer; font-size: 0.82em;
     text-align: center; transition: all 0.15s; font-family: inherit;
@@ -92,7 +101,7 @@
 <div class="app">
   <header>
     <h1>BINAURAL LOOM</h1>
-    <p class="subtitle">Schumann-tuned binaural beat generator &middot; Ontos Labs</p>
+    <p class="subtitle">Schumann-tuned beat generator &middot; binaural / monaural / isochronic &middot; Ontos Labs</p>
   </header>
 
   <div class="visualizer">
@@ -101,6 +110,14 @@
 
   <div class="panel">
     <div class="panel-title">Modulators</div>
+    <div class="modes">
+      <button class="mode active" data-mode="binaural">Binaural
+        <span class="sub">one tone per ear &middot; headphones</span></button>
+      <button class="mode" data-mode="monaural">Monaural
+        <span class="sub">both tones, both ears &middot; speakers OK</span></button>
+      <button class="mode" data-mode="isochronic">Isochronic
+        <span class="sub">one tone, gated at &Delta; &middot; speakers OK</span></button>
+    </div>
     <div class="controls">
       <div class="ctrl">
         <label>Carrier (Hz)</label>
@@ -163,11 +180,11 @@
         <button class="btn" id="export-wav">&darr; Export WAV</button>
       </div>
     </div>
-    <div class="status" id="status">Ready. Headphones recommended &mdash; binaural beats need stereo separation.</div>
+    <div class="status" id="status">Ready. Binaural needs headphones &mdash; the beat only exists between your ears. Monaural and Isochronic put the beat in the signal, so speakers work.</div>
   </div>
 
   <div class="footer">
-    Ontos Labs <span class="glyph">&#9670;</span> Phase coherence as music <span class="glyph">&#9670;</span> v0.1
+    Ontos Labs <span class="glyph">&#9670;</span> Phase coherence as music <span class="glyph">&#9670;</span> v0.2
   </div>
 </div><script>
 'use strict';
@@ -176,6 +193,7 @@
 let ctx = null;
 let nodes = null;
 let isPlaying = false;
+let mode = 'binaural';   // 'binaural' | 'monaural' | 'isochronic'
 const $ = id => document.getElementById(id);
 const params = ['carrier','beat','drone','noise','master'];
 
@@ -202,9 +220,30 @@ document.querySelectorAll('.preset').forEach(btn => {
     $('beat').value = btn.dataset.b;
     $('carrier').dispatchEvent(new Event('input'));
     $('beat').dispatchEvent(new Event('input'));
-    setStatus(`Preset loaded: ${btn.dataset.b} Hz over ${btn.dataset.c} Hz carrier.`);
+    setStatus(`Preset loaded: ${btn.dataset.b} Hz over ${btn.dataset.c} Hz carrier.` + fusionWarning());
   });
-});function setStatus(msg, active = false) {
+});
+
+// === MODE SELECT ===
+const MODE_NOTE = {
+  binaural: 'Binaural: one tone per ear; the beat is computed in your brainstem. Headphones required.',
+  monaural: 'Monaural: both tones in both ears; the beat is a real envelope in the signal. Works on speakers.',
+  isochronic: 'Isochronic: one tone, amplitude-gated at the beat rate. Works on speakers.'
+};
+function fusionWarning() {
+  return (mode === 'binaural' && +$('beat').value > 30)
+    ? ' Binaural fusion fails above ~30 Hz &mdash; use Monaural or Isochronic for gamma.' : '';
+}
+document.querySelectorAll('.mode').forEach(btn => {
+  btn.addEventListener('click', () => {
+    mode = btn.dataset.mode;
+    document.querySelectorAll('.mode').forEach(b => b.classList.toggle('active', b === btn));
+    setStatus(MODE_NOTE[mode] + fusionWarning());
+    if (isPlaying) { stop(); setTimeout(play, 550); }   // topology changed: rebuild the graph
+  });
+});
+
+function setStatus(msg, active = false) {
   const s = $('status');
   s.innerHTML = msg;
   s.classList.toggle('active', active);
@@ -233,28 +272,53 @@ function makePinkNoiseBuffer(audioCtx, durationSec) {
   return buf;
 }// === LIVE AUDIO ENGINE ===
 function buildGraph(audioCtx, opts) {
-  const { carrier, beat, drone, noise, master } = opts;
+  const { carrier, beat, drone, noise, master, mode } = opts;
   const masterGain = audioCtx.createGain();
   masterGain.gain.value = master;
   masterGain.connect(audioCtx.destination);
 
-  // Left ear: carrier - beat/2
-  const lOsc = audioCtx.createOscillator();
-  lOsc.type = 'sine';
-  lOsc.frequency.value = carrier - beat / 2;
-  const lGain = audioCtx.createGain(); lGain.gain.value = 0.5;
-  const lPan = audioCtx.createStereoPanner(); lPan.pan.value = -1;
-  lOsc.connect(lGain).connect(lPan).connect(masterGain);
+  const out = { masterGain, mode, oscs: [] };   // oscs: everything that needs start()/stop()
 
-  // Right ear: carrier + beat/2
-  const rOsc = audioCtx.createOscillator();
-  rOsc.type = 'sine';
-  rOsc.frequency.value = carrier + beat / 2;
-  const rGain = audioCtx.createGain(); rGain.gain.value = 0.5;
-  const rPan = audioCtx.createStereoPanner(); rPan.pan.value = 1;
-  rOsc.connect(rGain).connect(rPan).connect(masterGain);
-
-  const out = { masterGain, lOsc, rOsc, lGain, rGain };
+  if (mode === 'isochronic') {
+    // One tone at the carrier, amplitude-gated at the beat rate (sine gate, 100% depth).
+    // The beat is in the signal: works on speakers, and gamma rates are honest here.
+    const tOsc = audioCtx.createOscillator();
+    tOsc.type = 'sine';
+    tOsc.frequency.value = carrier;
+    const tGain = audioCtx.createGain(); tGain.gain.value = 0.5;        // resting level
+    const lfo = audioCtx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = beat;
+    const lfoDepth = audioCtx.createGain(); lfoDepth.gain.value = 0.5;  // swings gain 0..1
+    lfo.connect(lfoDepth).connect(tGain.gain);
+    tOsc.connect(tGain).connect(masterGain);
+    out.tOsc = tOsc; out.lfo = lfo; out.oscs.push(tOsc, lfo);
+  } else {
+    // Two tones at carrier -/+ beat/2.
+    // Binaural: one per ear, hard-panned; the beat is computed in the brainstem (headphones).
+    // Monaural: both tones in both ears; the beat is a real envelope in the signal (speakers OK).
+    const lOsc = audioCtx.createOscillator();
+    lOsc.type = 'sine';
+    lOsc.frequency.value = carrier - beat / 2;
+    const rOsc = audioCtx.createOscillator();
+    rOsc.type = 'sine';
+    rOsc.frequency.value = carrier + beat / 2;
+    const lGain = audioCtx.createGain();
+    const rGain = audioCtx.createGain();
+    if (mode === 'binaural') {
+      lGain.gain.value = 0.5; rGain.gain.value = 0.5;
+      const lPan = audioCtx.createStereoPanner(); lPan.pan.value = -1;
+      const rPan = audioCtx.createStereoPanner(); rPan.pan.value = 1;
+      lOsc.connect(lGain).connect(lPan).connect(masterGain);
+      rOsc.connect(rGain).connect(rPan).connect(masterGain);
+    } else {
+      lGain.gain.value = 0.4; rGain.gain.value = 0.4;   // sum peaks at 0.8 on the beat crest
+      lOsc.connect(lGain).connect(masterGain);
+      rOsc.connect(rGain).connect(masterGain);
+    }
+    out.lOsc = lOsc; out.rOsc = rOsc; out.lGain = lGain; out.rGain = rGain;
+    out.oscs.push(lOsc, rOsc);
+  }
 
   // Optional drone (perfect fifth above carrier, triangle)
   if (drone > 0) {
@@ -263,7 +327,7 @@ function buildGraph(audioCtx, opts) {
     dOsc.frequency.value = carrier * 1.5;
     const dGain = audioCtx.createGain(); dGain.gain.value = drone * 0.18;
     dOsc.connect(dGain).connect(masterGain);
-    out.dOsc = dOsc; out.dGain = dGain;
+    out.dOsc = dOsc; out.dGain = dGain; out.oscs.push(dOsc);
   }  // Optional pink noise bed
   if (noise > 0) {
     const nBuf = makePinkNoiseBuffer(audioCtx, 4);
@@ -271,7 +335,7 @@ function buildGraph(audioCtx, opts) {
     nSrc.buffer = nBuf; nSrc.loop = true;
     const nGain = audioCtx.createGain(); nGain.gain.value = noise * 0.12;
     nSrc.connect(nGain).connect(masterGain);
-    out.nSrc = nSrc; out.nGain = nGain;
+    out.nSrc = nSrc; out.nGain = nGain; out.oscs.push(nSrc);
   }
   return out;
 }
@@ -283,6 +347,7 @@ function getOpts() {
     drone: +$('drone').value,
     noise: +$('noise').value,
     master: +$('master').value,
+    mode,
   };
 }
 
@@ -290,8 +355,13 @@ function updateLive() {
   if (!nodes || !ctx) return;
   const o = getOpts();
   const t = ctx.currentTime;
-  nodes.lOsc.frequency.setTargetAtTime(o.carrier - o.beat/2, t, 0.05);
-  nodes.rOsc.frequency.setTargetAtTime(o.carrier + o.beat/2, t, 0.05);
+  if (nodes.tOsc) {
+    nodes.tOsc.frequency.setTargetAtTime(o.carrier, t, 0.05);
+    nodes.lfo.frequency.setTargetAtTime(o.beat, t, 0.05);
+  } else {
+    nodes.lOsc.frequency.setTargetAtTime(o.carrier - o.beat/2, t, 0.05);
+    nodes.rOsc.frequency.setTargetAtTime(o.carrier + o.beat/2, t, 0.05);
+  }
   nodes.masterGain.gain.setTargetAtTime(o.master, t, 0.05);
   if (nodes.dGain) nodes.dGain.gain.setTargetAtTime(o.drone * 0.18, t, 0.05);
   if (nodes.nGain) nodes.nGain.gain.setTargetAtTime(o.noise * 0.12, t, 0.05);
@@ -304,26 +374,22 @@ function updateLive() {
   // Soft fade-in
   nodes.masterGain.gain.setValueAtTime(0, ctx.currentTime);
   nodes.masterGain.gain.linearRampToValueAtTime(o.master, ctx.currentTime + 0.6);
-  nodes.lOsc.start();
-  nodes.rOsc.start();
-  if (nodes.dOsc) nodes.dOsc.start();
-  if (nodes.nSrc) nodes.nSrc.start();
+  nodes.oscs.forEach(n => n.start());
   isPlaying = true;
-  setStatus(`Playing &mdash; ${o.beat.toFixed(2)} Hz beat over ${o.carrier.toFixed(1)} Hz carrier`, true);
+  setStatus(`Playing ${o.mode} &mdash; ${o.beat.toFixed(2)} Hz beat over ${o.carrier.toFixed(1)} Hz carrier.` + fusionWarning(), true);
 }
 
 function stop() {
   if (!isPlaying || !ctx) return;
-  const t = ctx.currentTime;
-  nodes.masterGain.gain.cancelScheduledValues(t);
-  nodes.masterGain.gain.setValueAtTime(nodes.masterGain.gain.value, t);
-  nodes.masterGain.gain.linearRampToValueAtTime(0, t + 0.4);
+  const c = ctx, n = nodes;   // capture: a restart may have replaced them before the fade ends
+  const t = c.currentTime;
+  n.masterGain.gain.cancelScheduledValues(t);
+  n.masterGain.gain.setValueAtTime(n.masterGain.gain.value, t);
+  n.masterGain.gain.linearRampToValueAtTime(0, t + 0.4);
   setTimeout(() => {
-    try { nodes.lOsc.stop(); nodes.rOsc.stop(); } catch(e) {}
-    if (nodes.dOsc) try { nodes.dOsc.stop(); } catch(e) {}
-    if (nodes.nSrc) try { nodes.nSrc.stop(); } catch(e) {}
-    ctx.close();
-    ctx = null; nodes = null;
+    n.oscs.forEach(o => { try { o.stop(); } catch(e) {} });
+    c.close();
+    if (ctx === c) { ctx = null; nodes = null; }
   }, 500);
   isPlaying = false;
   setStatus('Stopped.');
@@ -349,14 +415,12 @@ async function exportWav() {
     g.masterGain.gain.setValueAtTime(o.master, seconds - fade);
     g.masterGain.gain.linearRampToValueAtTime(0, seconds);
 
-    g.lOsc.start(0); g.rOsc.start(0);
-    if (g.dOsc) g.dOsc.start(0);
-    if (g.nSrc) g.nSrc.start(0);
+    g.oscs.forEach(n => n.start(0));
 
     const buf = await offline.startRendering();
     const blob = bufferToWav(buf);
     const beatStr = o.beat.toFixed(2).replace('.','p');
-    const fname = `binaural_${o.carrier.toFixed(0)}Hz_${beatStr}Hz_${seconds}s.wav`;
+    const fname = `${o.mode}_${o.carrier.toFixed(0)}Hz_${beatStr}Hz_${seconds}s.wav`;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = fname; a.click();

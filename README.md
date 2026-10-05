@@ -14,6 +14,14 @@ Generates binaural beats — two slightly-detuned sine tones, one in each ear, t
 
 Export any settings as a 16-bit / 44.1 kHz stereo WAV up to one hour long. Drops straight into FL Studio, Ableton, Logic, Reaper, Audition, or any audio editor.
 
+## Three modes (v0.2)
+
+- **Binaural** — one tone per ear, carrier ∓ Δ/2. The beat is not in the signal; your brainstem computes it from the interaural phase difference. Headphones required. Fusion fails above ~30 Hz, so the Gamma preset warns you.
+- **Monaural** — both tones in both ears. The beat is a real amplitude envelope in the signal, demodulated by the cochlea. Works on speakers and phones, and collapses to mono without losing anything.
+- **Isochronic** — a single tone at the carrier, amplitude-gated at Δ (sine gate, 100% depth). Also works on speakers. This is the classic stimulus for the auditory steady-state response; 40 Hz is honest here.
+
+Exported filenames carry the mode: `monaural_200Hz_7p83Hz_60s.wav`.
+
 ## Presets
 
 - **7.83 Hz Schumann** — Earth's electromagnetic cavity resonance
@@ -25,7 +33,7 @@ Export any settings as a 16-bit / 44.1 kHz stereo WAV up to one hour long. Drops
 
 ## How to use
 
-1. Plug in headphones (binaural beats need stereo separation to work)
+1. Pick a mode. Binaural needs headphones; Monaural and Isochronic work on anything
 2. Pick a preset or dial your own carrier and beat frequencies
 3. Hit Play, listen for the phantom pulsing tone
 4. Optional: set duration, hit Export, drop the WAV anywhere you like
@@ -44,4 +52,4 @@ MIT. Take it. Fork it. Remix it. Stick it in your meditation app. No permission 
 
 ---
 
-*Phase coherence as music. v0.1.*
+*Phase coherence as music. v0.2.*
